@@ -758,7 +758,7 @@ class CustomReporter extends MarkdownReporter {
 <td width="50%">
 
 ### **🧠 Real AI Integration** 
-*Coming Q2 2024*
+*Coming Soon*
 
 **🎯 Features:**
 - **OpenAI/Claude Integration**: Replace dummy proposer with real AI
@@ -779,7 +779,7 @@ smoke add-test "Test the checkout flow with valid payment"
 <td width="50%">
 
 ### **🌐 Framework Expansion**
-*Coming Q3 2024*
+*Coming Soon*
 
 **🎯 Features:**
 - **React**: Full React app support beyond Next.js
@@ -800,7 +800,7 @@ smoke detect-framework
 <td width="50%">
 
 ### **⚡ Performance Revolution**
-*Coming Q4 2024*
+*Coming Soon*
 
 **🎯 Features:**
 - **Distributed Testing**: Run tests across multiple machines
@@ -889,7 +889,6 @@ smoke pipeline create
 ### **💬 Community**
 - **GitHub Discussions**: Share ideas and get help
 - **Discord**: Real-time community chat
-- **Twitter**: Follow [@SmokeRunner](https://twitter.com/smokerunner)
 - **Blog**: Deep dives and tutorials
 
 [**Join Discord →**](#)
