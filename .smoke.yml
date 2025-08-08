@@ -1,0 +1,73 @@
+# Smoke Runner Configuration
+# This file configures automated smoke tests for your Next.js application
+
+defaults:
+  # Elements that must exist on every page
+  must_exist:
+    - "main"
+  # Whether pages should be free of console/JavaScript errors
+  must_not_error: true
+
+# Route-specific configuration
+routes:
+  "/":
+    must_exist:
+      - "main"
+      - "[data-testid='page-title'], h1"
+
+  "/dashboard":
+    must_exist:
+      - "main"
+      - "[data-testid='dashboard-content']"
+    demo_flow:
+      - click: "[data-testid='refresh-btn']"
+      - expect_text: "Updated"
+
+  "/reports":
+    must_exist:
+      - "main"
+      - "table, [data-testid='reports-table']"
+    demo_flow:
+      - click: "button[data-testid='create-report'], button:has-text('Create')"
+      - type: 
+          selector: "input[name='name'], input[data-testid='report-name']"
+          text: "Smoke Test Report"
+      - click: "button[type='submit'], button:has-text('Save')"
+      - expect_text: "created|saved|success"
+
+  "/projects/[id]":
+    sample_params:
+      id: "123"  # Will test /projects/123
+    must_exist:
+      - "main"
+      - "[data-testid='project-details']"
+
+  "/settings":
+    must_exist:
+      - "main"
+      - "form, [data-testid='settings-form']"
+
+# Authentication configuration
+auth:
+  mode: "none"  # Options: "none", "cookie", "magic_link"
+  # For cookie auth, provide the cookie value:
+  # cookie: "__session=your-test-session-token"
+  # For magic link auth, provide the test path:
+  # magic_link_path: "/auth/test-login"
+
+# Accessibility testing with Axe
+axe:
+  # Rules to ignore (use sparingly)
+  ignore:
+    - "color-contrast"  # Example: ignore color contrast issues during development
+
+# Visual regression testing
+visual:
+  enabled: false  # Set to true to enable visual regression tests
+  threshold: 0.2  # Pixel difference threshold (0.0 - 1.0)
+
+# Lighthouse performance budgets
+lighthouse:
+  # These are applied automatically via lighthouserc.json
+  performance_budget: 80
+  accessibility_budget: 90

@@ -1,0 +1,117 @@
+# Smoke Runner Configuration
+# Copy this file to .smoke.yml and customize for your application
+
+# Default settings applied to all routes
+defaults:
+  must_exist:
+    - 'main'
+    - '[data-testid="navigation"]'
+    - 'footer'
+  must_not_error: true
+
+# Authentication configuration
+auth:
+  mode: 'none' # Options: none, cookie, magic_link, basic, oauth_token
+  # cookie: 'auth-token=your-test-token'
+  # magic_link_path: '/auth/magic-link?token=test-token'
+  # For basic auth, set BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD env vars
+  # For oauth, set OAUTH_TOKEN env var
+
+# Accessibility testing configuration  
+axe:
+  ignore:
+    - 'color-contrast' # Example: ignore color contrast issues during development
+    - 'duplicate-id'
+
+# Visual regression testing
+visual:
+  enabled: false # Set to true to enable visual testing
+  threshold: 0.2  # Pixel difference threshold (0.0 - 1.0)
+
+# Route-specific configurations
+routes:
+  # Home page
+  '/':
+    must_exist:
+      - '[data-testid="hero-section"]'
+      - '[data-testid="cta-button"]'
+    demo_flow:
+      - click: '[data-testid="cta-button"]'
+      - expect_text: 'Welcome'
+
+  # Dashboard (example authenticated route)
+  '/dashboard':
+    must_exist:
+      - '[data-testid="dashboard-header"]'
+      - '[data-testid="stats-widget"]'
+
+  # User profile with dynamic routing
+  '/user/[id]':
+    sample_params:
+      id: '123'
+    must_exist:
+      - '[data-testid="user-avatar"]'
+      - '[data-testid="user-name"]'
+    demo_flow:
+      - click: '[data-testid="edit-profile"]'
+      - expect_text: 'Edit Profile'
+
+  # Settings page
+  '/settings':
+    must_exist:
+      - '[data-testid="settings-form"]'
+    demo_flow:
+      - click: '[data-testid="theme-toggle"]'
+      - expect_text: 'Theme updated'
+
+  # Search functionality
+  '/search':
+    must_exist:
+      - '[data-testid="search-input"]'
+      - '[data-testid="search-results"]'
+    demo_flow:
+      - type:
+          selector: '[data-testid="search-input"]'
+          text: 'smoke test'
+      - click: '[data-testid="search-button"]'
+      - expect_text: 'Search results'
+
+  # Form submission example
+  '/contact':
+    must_exist:
+      - '[data-testid="contact-form"]'
+    demo_flow:
+      - type:
+          selector: '[data-testid="name-input"]'
+          text: 'Test User'
+      - type:
+          selector: '[data-testid="email-input"]'
+          text: 'test@example.com'
+      - type:
+          selector: '[data-testid="message-input"]'
+          text: 'This is a smoke test message'
+      - click: '[data-testid="submit-button"]'
+      - expect_text: 'Message sent'
+
+  # E-commerce cart flow example
+  '/products/[id]':
+    sample_params:
+      id: 'test-product-123'
+    must_exist:
+      - '[data-testid="product-title"]'
+      - '[data-testid="add-to-cart"]'
+    demo_flow:
+      - click: '[data-testid="add-to-cart"]'
+      - expect_text: 'Added to cart'
+      - click: '[data-testid="view-cart"]'
+      - expect_text: 'Shopping Cart'
+
+  # Admin panel (auth required)
+  '/admin':
+    must_exist:
+      - '[data-testid="admin-nav"]'
+      - '[data-testid="admin-dashboard"]'
+    # Note: This route will be skipped if auth is not configured
+
+# Custom routes not discovered automatically
+# Useful for dynamic routes, external links, or specific test scenarios

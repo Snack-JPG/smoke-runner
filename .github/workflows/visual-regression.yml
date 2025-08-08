@@ -1,0 +1,94 @@
+name: Visual Regression Tests
+
+on:
+  schedule:
+    # Run visual regression tests weekly on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL to test'
+        required: false
+        default: 'https://your-production-app.vercel.app'
+        type: string
+      update_baselines:
+        description: 'Update baseline screenshots'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  VISUAL: 1
+  SMOKE_CONCURRENCY: 1
+  TIMEOUT: 60000
+
+jobs:
+  visual-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Restore baseline screenshots
+        if: '!github.event.inputs.update_baselines'
+        uses: actions/cache@v4
+        with:
+          path: packages/auto-smoke/test-results/
+          key: visual-baselines-${{ hashFiles('packages/auto-smoke/tests/visual.spec.ts') }}
+          restore-keys: |
+            visual-baselines-
+
+      - name: Run visual regression tests
+        run: pnpm smoke:visual
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://your-production-app.vercel.app' }}
+          ROUTE_LIMIT: 20
+          AUTH_MODE: none
+          UPDATE_SNAPSHOTS: ${{ github.event.inputs.update_baselines && '--update-snapshots' || '' }}
+
+      - name: Save baseline screenshots
+        if: github.event.inputs.update_baselines
+        uses: actions/cache@v4
+        with:
+          path: packages/auto-smoke/test-results/
+          key: visual-baselines-${{ hashFiles('packages/auto-smoke/tests/visual.spec.ts') }}-${{ github.run_id }}
+
+      - name: Upload visual test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-regression-results
+          path: |
+            packages/auto-smoke/test-results/
+            packages/auto-smoke/__screenshots__/
+            playwright-report/
+          retention-days: 14
+
+      - name: Notify on visual changes
+        if: failure() && !github.event.inputs.update_baselines
+        run: |
+          echo "Visual regression detected! Check the artifacts for differences."
+          if [ -n "${{ secrets.SMOKE_SLACK_WEBHOOK }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data '{"text": "🖼️ Visual regression detected in smoke tests!", "color": "warning"}' \
+              ${{ secrets.SMOKE_SLACK_WEBHOOK }}
+          fi

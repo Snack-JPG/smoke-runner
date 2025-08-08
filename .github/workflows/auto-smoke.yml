@@ -1,0 +1,182 @@
+name: Auto Smoke Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'app/**'
+      - 'pages/**'
+      - 'packages/auto-smoke/**'
+      - '.smoke.yml'
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm -C packages/auto-smoke exec playwright install --with-deps chromium
+
+      - name: Wait for Vercel Preview
+        id: wait-for-preview
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { context } = github;
+            let deploymentUrl = null;
+            
+            // Check for VERCEL_PREVIEW_URL environment variable first
+            if (process.env.VERCEL_PREVIEW_URL) {
+              deploymentUrl = process.env.VERCEL_PREVIEW_URL;
+              console.log('Using VERCEL_PREVIEW_URL:', deploymentUrl);
+            } else {
+              // Wait for Vercel deployment
+              const maxWaitTime = 10 * 60 * 1000; // 10 minutes
+              const startTime = Date.now();
+              
+              while (Date.now() - startTime < maxWaitTime) {
+                const deployments = await github.rest.repos.listDeployments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: context.payload.pull_request.head.sha,
+                  per_page: 10
+                });
+                
+                for (const deployment of deployments.data) {
+                  if (deployment.environment === 'Preview') {
+                    const statuses = await github.rest.repos.listDeploymentStatuses({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      deployment_id: deployment.id
+                    });
+                    
+                    const successStatus = statuses.data.find(s => s.state === 'success');
+                    if (successStatus && successStatus.target_url) {
+                      deploymentUrl = successStatus.target_url;
+                      console.log('Found Vercel preview URL:', deploymentUrl);
+                      break;
+                    }
+                  }
+                }
+                
+                if (deploymentUrl) break;
+                
+                console.log('Waiting for Vercel deployment...');
+                await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
+              }
+            }
+            
+            if (!deploymentUrl) {
+              core.setFailed('Could not find Vercel preview URL. Set VERCEL_PREVIEW_URL manually or ensure Vercel deployment completes.');
+              return;
+            }
+            
+            core.setOutput('url', deploymentUrl);
+            return deploymentUrl;
+
+      - name: Wait for deployment to be ready
+        run: |
+          echo "Waiting for ${{ steps.wait-for-preview.outputs.url }} to be ready..."
+          for i in {1..20}; do
+            if curl -f -s "${{ steps.wait-for-preview.outputs.url }}" > /dev/null; then
+              echo "✅ Deployment is ready!"
+              break
+            fi
+            echo "⏳ Attempt $i/20 - waiting 15s..."
+            sleep 15
+          done
+
+      - name: Run smoke tests
+        env:
+          BASE_URL: ${{ steps.wait-for-preview.outputs.url }}
+          CI: true
+        run: |
+          echo "🔥 Running smoke tests against $BASE_URL"
+          pnpm -C packages/auto-smoke run test:local
+
+      - name: Run Lighthouse CI
+        env:
+          BASE_URL: ${{ steps.wait-for-preview.outputs.url }}
+        run: |
+          # Update lighthouserc.json with the actual URL
+          sed -i "s|http://localhost:3000|$BASE_URL|g" packages/auto-smoke/lighthouserc.json
+          pnpm -C packages/auto-smoke run lhci
+        continue-on-error: true
+
+      - name: Generate AI proposals
+        run: |
+          pnpm -C packages/ai-sidecar run propose batch --evidence-dir .cache/evidence --output-dir ./proposals
+        continue-on-error: true
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-results
+          path: |
+            packages/auto-smoke/playwright-report/
+            packages/auto-smoke/test-results/
+            packages/auto-smoke/__screenshots__/
+            proposals/
+            smoke-report.md
+          retention-days: 7
+
+      - name: Post results to Slack
+        if: env.SMOKE_SLACK_WEBHOOK
+        run: |
+          # This would be handled by the markdown reporter
+          echo "Slack webhook configured but not implemented in this step"
+        continue-on-error: true
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            const path = './smoke-report.md';
+            
+            let reportContent = '## 🔥 Smoke Test Results\n\n';
+            
+            if (fs.existsSync(path)) {
+              reportContent = fs.readFileSync(path, 'utf-8');
+            } else {
+              reportContent += 'Report file not found. Check the workflow logs for details.';
+            }
+            
+            // Truncate if too long for GitHub comment
+            if (reportContent.length > 65000) {
+              reportContent = reportContent.substring(0, 65000) + '\n\n... (truncated)';
+            }
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: reportContent
+            });
+
+env:
+  VERCEL_PREVIEW_URL: ${{ secrets.VERCEL_PREVIEW_URL }}
+  SMOKE_SLACK_WEBHOOK: ${{ secrets.SMOKE_SLACK_WEBHOOK }}
